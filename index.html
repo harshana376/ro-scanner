@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0B2E36">
+<title>RO Service Scanner</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<style>
+:root{
+  --ink:#0B2E36; --deep:#071c22; --teal:#0E7C8A; --teal-dk:#0a5f6a;
+  --surface:#E8F4F4; --line:#C2DCDD; --mid:#5A868D;
+  --amber:#E8A33D; --green:#1F9D55; --red:#C0392B;
+  --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;height:100%;overscroll-behavior:none}
+body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;font-size:17px;
+  line-height:1.45;background:var(--surface);color:var(--ink)}
+button{font:inherit;cursor:pointer}
+.hide{display:none!important}
+
+/* ---------- shell ---------- */
+.view{position:fixed;inset:0;display:flex;flex-direction:column;overflow:auto;
+      background:var(--surface);padding-bottom:env(safe-area-inset-bottom)}
+.bar{background:var(--deep);color:#8FC4C9;padding:calc(11px + env(safe-area-inset-top)) 18px 11px;
+  font-size:11px;letter-spacing:.22em;text-transform:uppercase;font-weight:700;
+  display:flex;justify-content:space-between;align-items:center;gap:10px;flex:none}
+.bar .net{display:flex;align-items:center;gap:6px;letter-spacing:.06em}
+.bar .net i{width:8px;height:8px;border-radius:50%;background:var(--green);display:block}
+.bar .net.off i{background:var(--amber)}
+.pad{padding:20px 18px}
+
+h1{font-size:25px;font-weight:800;letter-spacing:-.02em;margin:0 0 6px}
+.sub{color:#3d6169;font-size:15px;margin:0 0 20px}
+.lab{font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;
+  color:#4A7880;margin:20px 0 7px}
+input,textarea{width:100%;font:inherit;font-size:17px;padding:14px 15px;border-radius:10px;
+  border:1.5px solid var(--line);background:#fff;color:var(--ink)}
+input:focus,textarea:focus{outline:3px solid rgba(14,124,138,.3);border-color:var(--teal)}
+textarea{min-height:76px;resize:vertical}
+.btn{width:100%;padding:17px;border:0;border-radius:12px;background:var(--teal);color:#fff;
+  font-size:17px;font-weight:700}
+.btn:active{background:var(--teal-dk)}
+.btn[disabled]{opacity:.5}
+.btn.ghost{background:transparent;color:var(--teal);border:1.5px solid var(--line);font-weight:600}
+.btn.sm{padding:11px;font-size:14.5px;border-radius:9px}
+
+/* ---------- home ---------- */
+.scanwrap{padding:8px 18px 0;flex:none}
+.scanbtn{width:100%;aspect-ratio:1/.62;border:0;border-radius:20px;background:var(--ink);color:#fff;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+  box-shadow:0 16px 32px -18px rgba(11,46,54,.8)}
+.scanbtn:active{background:#0f3a44}
+.scanbtn .ic{width:66px;height:66px;position:relative}
+.scanbtn .ic span{position:absolute;width:20px;height:20px;border:3px solid var(--teal)}
+.scanbtn .ic span:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.scanbtn .ic span:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.scanbtn .ic span:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.scanbtn .ic span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+.scanbtn .ic b{position:absolute;left:8px;right:8px;top:50%;height:3px;background:var(--teal);
+  border-radius:2px;opacity:.85}
+.scanbtn .t{font-size:21px;font-weight:800;letter-spacing:.01em}
+.scanbtn .s{font-size:13px;color:#8FC4C9;font-weight:500}
+
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:16px 18px 0}
+.stat{background:#fff;border:1px solid var(--line);border-radius:13px;padding:13px 15px}
+.stat .n{font-family:var(--mono);font-size:27px;font-weight:700;line-height:1.1}
+.stat .l{font-size:11.5px;color:var(--mid);letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+.stat.warn{border-color:var(--amber);background:#fffaf1}
+.stat.warn .n{color:#a9700f}
+
+.pend{margin:16px 18px 0;background:#fffaf1;border:1px solid var(--amber);border-radius:13px;
+  padding:14px 16px;display:flex;gap:12px;align-items:center}
+.pend .tx{flex:1;font-size:14px;color:#7a5410;line-height:1.4}
+.pend button{flex:none;padding:10px 15px;border:0;border-radius:9px;background:var(--amber);
+  color:#3b2600;font-weight:700;font-size:14px}
+
+.listhead{display:flex;justify-content:space-between;align-items:baseline;
+  padding:26px 18px 8px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  font-weight:700;color:#4A7880}
+.item{display:flex;gap:13px;align-items:center;padding:13px 18px;border-top:1px solid var(--line)}
+.item .dot{width:9px;height:9px;border-radius:50%;flex:none}
+.item .dot.ok{background:var(--green)} .item .dot.q{background:var(--amber)}
+.item .dot.er{background:var(--red)} .item .dot.un{background:var(--teal)}
+.item .m{flex:1;min-width:0}
+.item .p{font-family:var(--mono);font-weight:700;font-size:16px}
+.item .d{font-size:12.5px;color:var(--mid);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .tm{font-size:12px;color:var(--mid);font-family:var(--mono);flex:none}
+.empty{padding:30px 18px;text-align:center;color:var(--mid);font-size:14.5px}
+.foot{margin-top:auto;padding:22px 18px calc(22px + env(safe-area-inset-bottom));
+  display:flex;gap:10px}
+
+/* ---------- camera ---------- */
+#vScan{background:#000;padding:0}
+#vScan video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.mask{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:22px;padding:24px}
+.retic{width:min(72vw,300px);aspect-ratio:1;position:relative}
+.retic span{position:absolute;width:15%;height:15%;border:4px solid #fff;border-radius:3px}
+.retic span:nth-child(1){top:0;left:0;border-right:0;border-bottom:0}
+.retic span:nth-child(2){top:0;right:0;border-left:0;border-bottom:0}
+.retic span:nth-child(3){bottom:0;left:0;border-right:0;border-top:0}
+.retic span:nth-child(4){bottom:0;right:0;border-left:0;border-top:0}
+.retic b{position:absolute;left:0;right:0;height:3px;background:var(--teal);
+  box-shadow:0 0 14px var(--teal);animation:sweep 2.1s ease-in-out infinite}
+@keyframes sweep{0%,100%{top:6%}50%{top:92%}}
+.camtx{color:#fff;font-size:15.5px;text-align:center;text-shadow:0 1px 6px rgba(0,0,0,.8);max-width:24ch}
+.camrow{position:absolute;left:0;right:0;bottom:calc(26px + env(safe-area-inset-bottom));
+  display:flex;gap:11px;padding:0 20px}
+.camrow button{flex:1;padding:15px;border:0;border-radius:12px;font-weight:700;font-size:15.5px;
+  background:rgba(255,255,255,.16);color:#fff;backdrop-filter:blur(8px)}
+.camrow button.pri{background:#fff;color:var(--ink)}
+#camErr{position:absolute;inset:0;background:var(--surface);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;padding:30px;gap:14px}
+
+/* ---------- confirm ---------- */
+.plate{background:var(--ink);color:#fff;padding:22px 18px 17px;text-align:center;
+  border-bottom:5px solid var(--teal);flex:none}
+.plate .l{font-size:10px;letter-spacing:.3em;color:#6EA8B0;font-weight:700}
+.plate .id{font-family:var(--mono);font-size:clamp(34px,12vw,52px);font-weight:700;line-height:1.05;margin-top:5px}
+.plate .tk{height:7px;max-width:170px;margin:12px auto 10px;
+  background:repeating-linear-gradient(90deg,#3d6d76 0 2px,transparent 2px 10px)}
+.plate .n{font-size:15.5px;font-weight:600}
+.plate .lo{font-size:13.5px;color:#9DC6CB}
+.plate .unk{color:var(--amber);font-size:13.5px;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chips span{padding:11px 15px;border:1.5px solid var(--line);border-radius:999px;background:#fff;
+  font-size:15px;font-weight:600}
+.chips span[aria-pressed=true]{background:var(--teal);border-color:var(--teal);color:#fff}
+.gps{margin-top:18px;font-size:13.5px;color:#4A7880;display:flex;gap:8px;align-items:center}
+.gps i{width:9px;height:9px;border-radius:50%;background:var(--amber);flex:none;display:block}
+.gps i.on{background:var(--green)}
+.stick{position:sticky;bottom:0;padding:14px 18px calc(14px + env(safe-area-inset-bottom));
+  background:linear-gradient(rgba(232,244,244,0),var(--surface) 24%);margin-top:auto}
+
+/* ---------- done ---------- */
+#vDone{background:var(--green);color:#fff;align-items:center;justify-content:center;
+  text-align:center;padding:34px}
+#vDone.q{background:var(--amber);color:#2b1c00}
+#vDone .k{font-size:82px;line-height:1}
+#vDone h2{margin:12px 0 3px;font-size:27px;font-weight:800}
+#vDone .p{font-size:15px;opacity:.93}
+#vDone .t{font-family:var(--mono);font-size:18px;margin-top:14px}
+#vDone .s{font-size:14.5px;opacity:.9;margin-top:20px;max-width:28ch}
+.err{margin-top:14px;padding:13px 15px;border-radius:10px;background:#fdecea;
+  border:1.5px solid #e5a29b;font-size:14.5px;color:#8c2f22}
+</style>
+</head>
+<body>
+
+<!-- ============ SETUP ============ -->
+<div class="view hide" id="vSetup">
+  <div class="bar"><span>RO Service Scanner</span></div>
+  <div class="pad">
+    <h1>Set up this phone</h1>
+    <p class="sub">Enter your name once. Every visit you log from this phone will be signed with it.</p>
+    <div class="lab">Technician name</div>
+    <input id="suName" autocomplete="name" placeholder="e.g. Sunil Perera">
+    <div class="lab">Mobile number (optional)</div>
+    <input id="suPhone" type="tel" inputmode="tel" placeholder="07X XXX XXXX">
+    <div style="margin-top:26px"><button class="btn" id="suGo">Save and continue</button></div>
+    <p class="sub" style="margin-top:18px;font-size:13.5px">Stored on this phone only. Change it any time from Settings.</p>
+  </div>
+</div>
+
+<!-- ============ HOME ============ -->
+<div class="view hide" id="vHome">
+  <div class="bar">
+    <span id="hTech">RO Service Scanner</span>
+    <span class="net" id="hNet"><i></i><b id="hNetT">Online</b></span>
+  </div>
+
+  <div class="scanwrap">
+    <button class="scanbtn" id="hScan">
+      <span class="ic"><span></span><span></span><span></span><span></span><b></b></span>
+      <span class="t">SCAN PLANT QR</span>
+      <span class="s">Point at the sticker on the unit</span>
+    </button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n" id="hToday">0</div><div class="l">Logged today</div></div>
+    <div class="stat" id="hPendBox"><div class="n" id="hPendN">0</div><div class="l">Waiting to send</div></div>
+  </div>
+
+  <div class="pend hide" id="hPend">
+    <div class="tx" id="hPendT"></div>
+    <button id="hSync">Send now</button>
+  </div>
+
+  <div class="listhead"><span>Recent visits</span><span id="hCount"></span></div>
+  <div id="hList"><div class="empty">No visits logged yet.</div></div>
+
+  <div class="foot">
+    <button class="btn ghost sm" id="hManual">Enter plant number</button>
+    <button class="btn ghost sm" id="hSet">Settings</button>
+  </div>
+</div>
+
+<!-- ============ CAMERA ============ -->
+<div class="view hide" id="vScan">
+  <video id="vid" playsinline muted autoplay></video>
+  <canvas id="cnv" class="hide"></canvas>
+  <div class="mask">
+    <div class="retic"><span></span><span></span><span></span><span></span><b></b></div>
+    <p class="camtx" id="camTx">Hold the sticker inside the frame</p>
+  </div>
+  <div class="camrow">
+    <button id="camTorch">Torch</button>
+    <button id="camType">Type number</button>
+    <button class="pri" id="camClose">Cancel</button>
+  </div>
+  <div id="camErr" class="hide">
+    <h1>Camera unavailable</h1>
+    <p class="sub" id="camErrT"></p>
+    <button class="btn" id="camErrType">Enter plant number instead</button>
+    <button class="btn ghost" id="camErrBack">Back</button>
+  </div>
+</div>
+
+<!-- ============ CONFIRM ============ -->
+<div class="view hide" id="vConf">
+  <div class="plate">
+    <div class="l">PLANT NUMBER</div>
+    <div class="id" id="cId">—</div>
+    <div class="tk"></div>
+    <div id="cMeta"></div>
+  </div>
+  <div class="pad" style="padding-top:16px">
+    <div class="lab" style="margin-top:0">Work carried out</div>
+    <div class="chips" id="cWork"></div>
+    <div class="lab">Note (optional)</div>
+    <textarea id="cNote" placeholder="Parts replaced, TDS reading, issues found…"></textarea>
+    <div class="gps"><i id="cGd"></i><span id="cGt">Getting location…</span></div>
+    <div class="err hide" id="cErr"></div>
+  </div>
+  <div class="stick">
+    <button class="btn" id="cGo">Log this visit</button>
+    <button class="btn ghost" id="cBack" style="margin-top:9px">Cancel</button>
+  </div>
+</div>
+
+<!-- ============ DONE ============ -->
+<div class="view hide" id="vDone">
+  <div class="k" id="dK">✓</div>
+  <h2 id="dH">Visit logged</h2>
+  <div class="p" id="dP"></div>
+  <div class="t" id="dT"></div>
+  <div class="s" id="dS"></div>
+</div>
+
+<!-- ============ SETTINGS ============ -->
+<div class="view hide" id="vSet">
+  <div class="bar"><span>Settings</span></div>
+  <div class="pad">
+    <div class="lab" style="margin-top:0">Technician name</div>
+    <input id="stName">
+    <div class="lab">Mobile number</div>
+    <input id="stPhone" type="tel" inputmode="tel">
+    <div class="lab">Device ID</div>
+    <input id="stDev" readonly style="font-family:var(--mono);background:#f2f8f8">
+    <div class="lab">Plant register</div>
+    <p class="sub" id="stPlants" style="margin:0 0 10px"></p>
+    <button class="btn ghost sm" id="stRefresh">Refresh plant list</button>
+    <div style="margin-top:26px"><button class="btn" id="stSave">Save</button></div>
+    <button class="btn ghost" id="stBack" style="margin-top:10px">Back</button>
+    <p class="sub" style="margin-top:22px;font-size:13px" id="stVer"></p>
+  </div>
+</div>
+
+<script src="jsQR.min.js"></script>
+<script>
+/* ============================================================
+   CONFIG — set these two lines, nothing else
+   ============================================================ */
+var CFG = {
+  API : 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE',
+  KEY : 'change-this-shared-key',
+  VER : 'v1.0'
+};
+
+var WORK = ['Routine service','Filter change','Membrane clean','Breakdown repair','Installation','Inspection only'];
+
+/* ---------- storage (falls back to memory if blocked) ---------- */
+var _mem = {};
+var S = {
+  get: function(k, d){ try{ var v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); }
+                       catch(e){ return (k in _mem) ? _mem[k] : d; } },
+  set: function(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){ _mem[k] = v; } }
+};
+
+/* ---------- state ---------- */
+var tech    = S.get('tech', null);
+var queue   = S.get('queue', []);
+var plants  = S.get('plants', {});
+var devId   = S.get('devid', null);
+if (!devId){ devId = 'DEV-' + Math.random().toString(36).slice(2,8).toUpperCase(); S.set('devid', devId); }
+
+var cur = null, work = WORK[0], pos = null, stream = null, scanning = false, torchOn = false;
+var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- view router ---------- */
+var VIEWS = ['vSetup','vHome','vScan','vConf','vDone','vSet'];
+function go(v){ VIEWS.forEach(function(x){ $(x).classList.toggle('hide', x !== v); }); }
+
+/* ============================================================
+   HOME
+   ============================================================ */
+function renderHome(){
+  $('hTech').textContent = tech ? tech.name : 'RO Service Scanner';
+  var today = new Date().toDateString();
+  var sent = queue.filter(function(q){ return q.status !== 'queued' && new Date(q.ts).toDateString() === today; });
+  /* 'unconfirmed' means the send could not be verified — retry it.
+     The server ignores a uid it has already logged, so retries are safe. */
+  var pend = queue.filter(function(q){
+    return (q.status === 'queued' || q.status === 'unconfirmed') && (q.tries || 0) < 6;
+  });
+
+  $('hToday').textContent = sent.length;
+  $('hPendN').textContent = pend.length;
+  $('hPendBox').classList.toggle('warn', pend.length > 0);
+  $('hPend').classList.toggle('hide', pend.length === 0);
+  if (pend.length) $('hPendT').textContent = pend.length + (pend.length === 1 ? ' visit is' : ' visits are')
+      + ' saved on this phone and will send as soon as there is signal.';
+
+  var list = $('hList'), recent = queue.slice(-25).reverse();
+  $('hCount').textContent = queue.length ? queue.length + ' total' : '';
+  if (!recent.length){ list.innerHTML = '<div class="empty">No visits logged yet.</div>'; return; }
+  list.innerHTML = recent.map(function(q){
+    var cls = q.status === 'sent' ? 'ok' : q.status === 'queued' ? 'q'
+            : q.status === 'unconfirmed' ? 'un' : 'er';
+    var lbl = q.status === 'sent' ? '' : q.status === 'queued' ? ' · waiting'
+            : q.status === 'unconfirmed' ? ' · sent' : ' · failed';
+    var p = plants[q.plantId];
+    return '<div class="item"><span class="dot ' + cls + '"></span><div class="m">'
+      + '<div class="p">' + esc(q.plantId) + '</div>'
+      + '<div class="d">' + esc(q.workType) + (p ? ' · ' + esc(p.name) : '') + esc(lbl) + '</div>'
+      + '</div><div class="tm">' + shortTime(q.ts) + '</div></div>';
+  }).join('');
+}
+function shortTime(ts){
+  var d = new Date(ts), now = new Date();
+  var t = d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  return d.toDateString() === now.toDateString() ? t
+       : d.toLocaleDateString([], {day:'2-digit', month:'short'}) + ' ' + t;
+}
+function esc(s){ return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+  return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+
+function netUI(){
+  var on = navigator.onLine;
+  $('hNet').classList.toggle('off', !on);
+  $('hNetT').textContent = on ? 'Online' : 'Offline';
+}
+window.addEventListener('online',  function(){ netUI(); sync(); });
+window.addEventListener('offline', netUI);
+
+/* ============================================================
+   CAMERA
+   ============================================================ */
+var detector = null;
+try { if ('BarcodeDetector' in window) detector = new BarcodeDetector({ formats: ['qr_code'] }); } catch(e){}
+
+async function openCamera(){
+  go('vScan');
+  $('camErr').classList.add('hide');
+  $('camTx').textContent = 'Hold the sticker inside the frame';
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+  }catch(e){
+    $('camErr').classList.remove('hide');
+    $('camErrT').textContent = (e && e.name === 'NotAllowedError')
+      ? 'Camera permission was refused. Allow it in your browser settings, or type the plant number instead.'
+      : 'This phone would not open the camera. You can still type the plant number.';
+    return;
+  }
+  var v = $('vid');
+  v.srcObject = stream;
+  await v.play().catch(function(){});
+  var track = stream.getVideoTracks()[0];
+  var caps  = track.getCapabilities ? track.getCapabilities() : {};
+  $('camTorch').style.display = (caps && caps.torch) ? '' : 'none';
+  torchOn = false;
+  scanning = true;
+  loop();
+}
+
+function stopCamera(){
+  scanning = false;
+  if (stream){ stream.getTracks().forEach(function(t){ t.stop(); }); stream = null; }
+}
+
+async function loop(){
+  if (!scanning) return;
+  var v = $('vid');
+  if (v.readyState === v.HAVE_ENOUGH_DATA){
+    var code = null;
+    if (detector){
+      try{ var r = await detector.detect(v); if (r && r.length) code = r[0].rawValue; }catch(e){ detector = null; }
+    }
+    if (!code && window.jsQR){
+      var c = $('cnv'), w = 420, h = Math.round(w * v.videoHeight / v.videoWidth) || 420;
+      c.width = w; c.height = h;
+      var ctx = c.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(v, 0, 0, w, h);
+      var img = ctx.getImageData(0, 0, w, h);
+      var q = jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
+      if (q) code = q.data;
+    }
+    if (code){
+      var id = parsePlant(code);
+      if (id){ if (navigator.vibrate) navigator.vibrate(70); stopCamera(); openConfirm(id); return; }
+      $('camTx').textContent = 'That QR is not a plant sticker. Try again.';
+    }
+  }
+  requestAnimationFrame(loop);
+}
+
+function parsePlant(text){
+  text = String(text || '').trim();
+  try{ var u = new URL(text); var p = u.searchParams.get('p'); if (p) return p.trim().toUpperCase(); }catch(e){}
+  var m = text.toUpperCase();
+  return /^[A-Z0-9][A-Z0-9\-_]{2,19}$/.test(m) ? m : null;
+}
+
+/* ============================================================
+   CONFIRM
+   ============================================================ */
+function openConfirm(id){
+  cur = id; work = WORK[0]; pos = null;
+  $('cId').textContent = id;
+  var p = plants[id];
+  $('cMeta').innerHTML = p
+    ? '<div class="n">' + esc(p.name) + '</div><div class="lo">' + esc(p.location) + '</div>'
+    : '<div class="unk">Not in the plant list — the visit will still be logged</div>';
+  $('cNote').value = '';
+  $('cErr').classList.add('hide');
+  [].forEach.call($('cWork').children, function(s, i){ s.setAttribute('aria-pressed', i === 0 ? 'true' : 'false'); });
+  $('cGd').classList.remove('on');
+  $('cGt').textContent = 'Getting location…';
+  $('cGo').disabled = false; $('cGo').textContent = 'Log this visit';
+  go('vConf');
+
+  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
+    function(g){ pos = g.coords; $('cGd').classList.add('on');
+      $('cGt').textContent = 'Location captured (±' + Math.round(g.coords.accuracy) + ' m)'; },
+    function(){ $('cGt').textContent = 'Location unavailable — visit will be flagged'; },
+    { enableHighAccuracy:true, timeout:12000, maximumAge:0 });
+  else $('cGt').textContent = 'Location not supported on this phone';
+}
+
+WORK.forEach(function(w, i){
+  var s = document.createElement('span');
+  s.textContent = w; s.setAttribute('role','button');
+  s.setAttribute('aria-pressed', i === 0 ? 'true' : 'false');
+  s.onclick = function(){
+    [].forEach.call($('cWork').children, function(x){ x.setAttribute('aria-pressed','false'); });
+    s.setAttribute('aria-pressed','true'); work = w;
+  };
+  $('cWork').appendChild(s);
+});
+
+$('cGo').onclick = async function(){
+  this.disabled = true; this.textContent = 'Saving…';
+  var item = {
+    uid      : 'S' + Date.now() + Math.random().toString(36).slice(2,6),
+    plantId  : cur,
+    tech     : tech.name,
+    techPhone: tech.phone || '',
+    workType : work,
+    note     : $('cNote').value.trim(),
+    device   : deviceName(),
+    deviceId : devId,
+    lat      : pos ? +pos.latitude.toFixed(6)  : null,
+    lng      : pos ? +pos.longitude.toFixed(6) : null,
+    ts       : new Date().toISOString(),
+    status   : 'queued'
+  };
+  queue.push(item); S.set('queue', queue);
+
+  var res = navigator.onLine ? await send(item) : false;
+  showDone(item, res);
+  renderHome();
+};
+
+/* ============================================================
+   SEND / SYNC
+   ============================================================ */
+async function send(item){
+  var body = JSON.stringify({
+    key: CFG.KEY, action: 'scan', source: 'App', uid: item.uid,
+    plantId: item.plantId, tech: item.tech, techPhone: item.techPhone,
+    workType: item.workType, note: item.note, device: item.device, deviceId: item.deviceId,
+    lat: item.lat, lng: item.lng, scannedAt: item.ts,
+    offline: (new Date() - new Date(item.ts)) > 90000
+  });
+  try{
+    var r = await fetch(CFG.API, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: body
+    });
+    var j = await r.json();
+    mark(item.uid, j && j.ok ? 'sent' : 'failed', j && j.flag);
+    return j && j.ok ? (j.flag || 'OK') : false;
+  }catch(e){
+    /* CORS or flaky network — fire and forget, then confirm on next sync */
+    try{
+      await fetch(CFG.API, { method:'POST', mode:'no-cors',
+        headers:{ 'Content-Type':'text/plain;charset=utf-8' }, body: body });
+      mark(item.uid, 'unconfirmed');
+      return 'unconfirmed';
+    }catch(e2){ mark(item.uid, 'queued'); return false; }
+  }
+}
+
+function mark(uid, status, flag){
+  for (var i = 0; i < queue.length; i++)
+    if (queue[i].uid === uid){ queue[i].status = status; if (flag) queue[i].flag = flag; }
+  if (queue.length > 300) queue = queue.slice(-300);
+  S.set('queue', queue);
+}
+
+var syncing = false;
+async function sync(){
+  if (syncing || !navigator.onLine) return;
+  syncing = true;
+  /* 'unconfirmed' means the send could not be verified — retry it.
+     The server ignores a uid it has already logged, so retries are safe. */
+  var pend = queue.filter(function(q){
+    return (q.status === 'queued' || q.status === 'unconfirmed') && (q.tries || 0) < 6;
+  });
+  for (var i = 0; i < pend.length; i++){
+    pend[i].tries = (pend[i].tries || 0) + 1;
+    await send(pend[i]);
+  }
+  S.set('queue', queue);
+  syncing = false;
+  renderHome();
+}
+
+async function loadPlants(){
+  if (!navigator.onLine) return false;
+  try{
+    var r = await fetch(CFG.API + '?action=plants&key=' + encodeURIComponent(CFG.KEY), { redirect:'follow' });
+    var j = await r.json();
+    if (j && j.ok && j.plants){
+      plants = {};
+      j.plants.forEach(function(p){ plants[String(p.id).toUpperCase()] = p; });
+      S.set('plants', plants);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+
+/* ============================================================
+   DONE
+   ============================================================ */
+function showDone(item, res){
+  var d = $('vDone');
+  var p = plants[item.plantId];
+  $('dP').textContent = item.plantId + (p ? ' · ' + p.name : '');
+  $('dT').textContent = new Date(item.ts).toLocaleString([], {
+    day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+
+  if (res === false){
+    d.className = 'view q'; $('dK').textContent = '⏱';
+    $('dH').textContent = 'Saved on this phone';
+    $('dS').textContent = 'No signal right now. It will send to the WhatsApp group automatically once you are back in coverage.';
+  } else if (res && res !== 'OK' && res !== 'unconfirmed'){
+    d.className = 'view q'; $('dK').textContent = '!';
+    $('dH').textContent = 'Logged with a flag';
+    $('dS').textContent = res + ' — the group message shows this warning.';
+  } else {
+    d.className = 'view'; $('dK').textContent = '✓';
+    $('dH').textContent = 'Visit logged';
+    $('dS').textContent = 'Sent to the WhatsApp group.';
+  }
+  go('vDone');
+  setTimeout(function(){ go('vHome'); renderHome(); }, 2600);
+}
+
+/* ============================================================
+   MISC
+   ============================================================ */
+function deviceName(){
+  var u = navigator.userAgent, os = 'Unknown', model = '', m;
+  if ((m = u.match(/Android\s([\d.]+)/))){
+    os = 'Android ' + m[1];
+    var b = u.match(/;\s*([^;)]+)\s+Build\//) || u.match(/Android[^;]*;\s*([^;)]+)\)/);
+    if (b) model = b[1].trim();
+  } else if (/iPhone/.test(u)){ os = 'iPhone'; m = u.match(/OS\s(\d+_\d+)/); if (m) os += ' iOS ' + m[1].replace('_','.'); }
+  else if (/iPad/.test(u)) os = 'iPad';
+  else if (/Windows/.test(u)) os = 'Windows PC';
+  var br = /EdgA?\//.test(u) ? 'Edge' : /OPR|Opera/.test(u) ? 'Opera'
+         : /Chrome/.test(u) ? 'Chrome' : /Safari/.test(u) ? 'Safari' : 'Browser';
+  return (model ? model + ' · ' : '') + os + ' · ' + br + ' · App';
+}
+
+function askManual(){
+  var v = prompt('Plant number (as printed on the sticker)');
+  if (!v) return;
+  var id = parsePlant(v);
+  if (!id){ alert('That does not look like a plant number.'); return; }
+  stopCamera(); openConfirm(id);
+}
+
+/* ---------- wiring ---------- */
+$('suGo').onclick = function(){
+  var n = $('suName').value.trim();
+  if (!n){ $('suName').focus(); return; }
+  tech = { name: n, phone: $('suPhone').value.trim() };
+  S.set('tech', tech);
+  go('vHome'); renderHome(); loadPlants().then(renderHome);
+};
+$('hScan').onclick   = openCamera;
+$('hManual').onclick = askManual;
+$('hSync').onclick   = sync;
+$('hSet').onclick    = function(){
+  $('stName').value = tech.name; $('stPhone').value = tech.phone || '';
+  $('stDev').value = devId;
+  var n = Object.keys(plants).length;
+  $('stPlants').textContent = n ? n + ' plants saved for offline use.' : 'No plant list saved yet.';
+  $('stVer').textContent = 'RO Service Scanner ' + CFG.VER;
+  go('vSet');
+};
+$('stSave').onclick = function(){
+  var n = $('stName').value.trim(); if (!n) return;
+  tech = { name: n, phone: $('stPhone').value.trim() };
+  S.set('tech', tech); go('vHome'); renderHome();
+};
+$('stBack').onclick    = function(){ go('vHome'); renderHome(); };
+$('stRefresh').onclick = async function(){
+  this.textContent = 'Refreshing…';
+  var ok = await loadPlants();
+  this.textContent = 'Refresh plant list';
+  $('stPlants').textContent = ok ? Object.keys(plants).length + ' plants saved for offline use.'
+                                 : 'Could not reach the server. Try again with signal.';
+};
+$('camClose').onclick   = function(){ stopCamera(); go('vHome'); renderHome(); };
+$('camErrBack').onclick = function(){ stopCamera(); go('vHome'); renderHome(); };
+$('camType').onclick    = askManual;
+$('camErrType').onclick = askManual;
+$('camTorch').onclick   = async function(){
+  if (!stream) return;
+  var t = stream.getVideoTracks()[0];
+  torchOn = !torchOn;
+  try{ await t.applyConstraints({ advanced: [{ torch: torchOn }] }); this.style.opacity = torchOn ? 1 : .75; }catch(e){}
+};
+$('cBack').onclick = function(){ go('vHome'); renderHome(); };
+
+document.addEventListener('visibilitychange', function(){
+  if (document.hidden) stopCamera();
+  else if (!$('vHome').classList.contains('hide')) sync();
+});
+
+/* ---------- boot ---------- */
+netUI();
+if (!tech) go('vSetup');
+else { go('vHome'); renderHome(); sync(); loadPlants().then(renderHome); }
+setInterval(sync, 60000);
+
+if ('serviceWorker' in navigator)
+  navigator.serviceWorker.register('sw.js').catch(function(){});
+</script>
+</body>
+</html>

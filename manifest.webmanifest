@@ -1,0 +1,17 @@
+{
+  "name": "RO Service Scanner",
+  "short_name": "RO Scanner",
+  "description": "Scan the QR sticker on an RO plant to log a technician visit. Works without signal.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0B2E36",
+  "theme_color": "#0B2E36",
+  "categories": ["utilities", "productivity"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
