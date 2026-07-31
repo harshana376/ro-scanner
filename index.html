@@ -193,6 +193,11 @@ textarea{min-height:76px;resize:vertical}
     <div class="stat" id="hPendBox"><div class="n" id="hPendN">0</div><div class="l">Waiting to send</div></div>
   </div>
 
+  <div class="pend hide" id="hInstall" style="background:#e6f2f3;border-color:var(--teal)">
+    <div class="tx" style="color:#0a5f6a">Install this app on your phone so it works without signal.</div>
+    <button id="hInstallBtn" style="background:var(--teal);color:#fff">Install</button>
+  </div>
+
   <div class="pend hide" id="hGeo" style="background:#fdecea;border-color:#e5a29b">
     <div class="tx" id="hGeoT" style="color:#8c2f22"></div>
     <button id="hGeoFix" style="background:#C0392B;color:#fff">Fix</button>
@@ -274,6 +279,10 @@ textarea{min-height:76px;resize:vertical}
     <input id="stPhone" type="tel" inputmode="tel">
     <div class="lab">Device ID</div>
     <input id="stDev" readonly style="font-family:var(--mono);background:#f2f8f8">
+    <div class="lab">Install on this phone</div>
+    <p class="sub" id="stInstall" style="margin:0 0 10px">Checking…</p>
+    <button class="btn ghost sm" id="stInstallBtn">Install app</button>
+
     <div class="lab">Location permission</div>
     <p class="sub" id="stGeo" style="margin:0 0 10px">Checking…</p>
     <button class="btn ghost sm" id="stGeoAsk">Request location access</button>
@@ -293,9 +302,9 @@ textarea{min-height:76px;resize:vertical}
    CONFIG — set these two lines, nothing else
    ============================================================ */
 var CFG = {
-  API : 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE',
-  KEY : 'change-this-shared-key',
-  VER : 'v1.1'
+  API : 'https://script.google.com/macros/s/AKfycbx7Xsam2HwV0kvewSibZwvDFNymK-OyMMFd7JOva2-PU6ttkoRnvOOnkJmhBenYK4mM/exec',
+  KEY : 'puttalam-ro-2026',
+  VER : 'v1.3'
 };
 
 var WORK = ['Routine service','Filter change','Membrane clean','Breakdown repair','Installation','Inspection only'];
@@ -317,6 +326,37 @@ if (!devId){ devId = 'DEV-' + Math.random().toString(36).slice(2,8).toUpperCase(
 
 var cur = null, work = WORK[0], pos = null, stream = null, scanning = false, torchOn = false;
 var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- install to home screen ---------- */
+var installEvt = null;
+function isInstalled(){
+  try{
+    return window.matchMedia('(display-mode: standalone)').matches
+        || window.matchMedia('(display-mode: fullscreen)').matches
+        || navigator.standalone === true;
+  }catch(e){ return false; }
+}
+function isIOS(){ return /iPhone|iPad|iPod/.test(navigator.userAgent); }
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault(); installEvt = e; installUI();
+});
+window.addEventListener('appinstalled', function(){ installEvt = null; installUI(); });
+function installUI(){
+  $('hInstall').classList.toggle('hide', !(installEvt && !isInstalled()));
+}
+async function doInstall(){
+  if (installEvt){
+    installEvt.prompt();
+    try{ await installEvt.userChoice; }catch(e){}
+    installEvt = null; installUI();
+    return;
+  }
+  alert(isIOS()
+    ? 'To install on iPhone:\n\n1. Tap the Share button\n2. Scroll down\n3. Tap "Add to Home Screen"'
+    : 'To install:\n\n1. Tap the menu button (three dots)\n2. Tap "Install app" or "Add to Home screen"\n\nIf you do not see it, the app may already be installed.');
+}
+$('hInstallBtn').onclick  = doInstall;
+$('stInstallBtn').onclick = doInstall;
 
 /* ---------- location permission ---------- */
 async function geoPermState(){
@@ -374,7 +414,7 @@ function renderHome(){
   if (pend.length) $('hPendT').textContent = pend.length + (pend.length === 1 ? ' visit is' : ' visits are')
       + ' saved on this phone and will send as soon as there is signal.';
 
-  geoBanner();
+  geoBanner(); installUI();
   var list = $('hList'), recent = queue.slice(-25).reverse();
   $('hCount').textContent = queue.length ? queue.length + ' total' : '';
   if (!recent.length){ list.innerHTML = '<div class="empty">No visits logged yet.</div>'; return; }
@@ -499,27 +539,42 @@ function openConfirm(id){
   geoStart();
 }
 
-/* Location. A phone's first fix is often a cell-tower guess good to a
-   kilometre; keep watching and keep the most accurate one. */
-var geoWatch = null;
+/* Location. Two requests run together: a fast coarse fix so we always
+   have something, and a slow precise one that refines it. */
+var geoWatch = null, geoTried = false, geoDenied = false;
 function geoUI(){
-  if (!pos){ $('cGt').textContent = 'Location unavailable — visit will be flagged'; return; }
+  if (!pos){
+    $('cGd').classList.remove('on');
+    $('cGt').textContent = geoDenied ? 'Location blocked — see Settings'
+                         : geoTried  ? 'No location yet — visit will be flagged'
+                         :             'Searching for location…';
+    return;
+  }
   var a = Math.round(pos.accuracy);
   $('cGd').classList.toggle('on', a <= 60);
-  $('cGt').textContent = a <=  60 ? 'Location confirmed (±' + a + ' m)'
-                       : a <= 500 ? 'Improving accuracy… (±' + a + ' m)'
-                       :            'Weak signal (±' + a + ' m) — step outside';
+  $('cGt').textContent = a <=  60 ? 'Location confirmed (\u00b1' + a + ' m)'
+                       : a <= 500 ? 'Improving accuracy… (\u00b1' + a + ' m)'
+                       :            'Weak signal (\u00b1' + a + ' m) — step outside';
+}
+function geoKeep(g){
+  if (!pos || g.coords.accuracy < pos.accuracy) pos = g.coords;
+  geoUI();
+  if (pos.accuracy <= 30) geoStop();
+}
+function geoFail(err){
+  geoTried = true;
+  if (err && err.code === 1) geoDenied = true;
+  geoUI();
 }
 function geoStop(){ if (geoWatch !== null){ navigator.geolocation.clearWatch(geoWatch); geoWatch = null; } }
 function geoStart(){
-  geoStop();
+  geoStop(); pos = null; geoTried = false; geoDenied = false; geoUI();
   if (!navigator.geolocation){ $('cGt').textContent = 'Location not supported on this phone'; return; }
-  geoWatch = navigator.geolocation.watchPosition(function(g){
-    if (!pos || g.coords.accuracy < pos.accuracy) pos = g.coords;
-    geoUI();
-    if (pos.accuracy <= 30) geoStop();
-  }, function(){ geoUI(); }, { enableHighAccuracy:true, maximumAge:0, timeout:20000 });
-  setTimeout(geoStop, 30000);
+  navigator.geolocation.getCurrentPosition(geoKeep, geoFail,
+    { enableHighAccuracy:false, timeout:10000, maximumAge:30000 });
+  geoWatch = navigator.geolocation.watchPosition(geoKeep, geoFail,
+    { enableHighAccuracy:true, maximumAge:0, timeout:30000 });
+  setTimeout(function(){ geoTried = true; geoStop(); geoUI(); }, 35000);
 }
 
 WORK.forEach(function(w, i){
@@ -701,6 +756,10 @@ $('hSet').onclick    = function(){
   var n = Object.keys(plants).length;
   $('stPlants').textContent = n ? n + ' plants saved for offline use.' : 'No plant list saved yet.';
   $('stVer').textContent = 'RO Service Scanner ' + CFG.VER;
+  $('stInstall').textContent = isInstalled()
+    ? 'Installed. You are running the app, not the browser.'
+    : installEvt ? 'Not installed yet. Tap below to add it to your home screen.'
+                 : 'Use your browser menu: "Install app" or "Add to Home screen".';
   geoPermState().then(function(st){
     $('stGeo').textContent =
       st === 'granted' ? 'Granted — visits will carry proof of location.'
