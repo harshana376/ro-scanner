@@ -162,7 +162,13 @@ textarea{min-height:76px;resize:vertical}
     <input id="suName" autocomplete="name" placeholder="e.g. Sunil Perera">
     <div class="lab">Mobile number (optional)</div>
     <input id="suPhone" type="tel" inputmode="tel" placeholder="07X XXX XXXX">
-    <div style="margin-top:26px"><button class="btn" id="suGo">Save and continue</button></div>
+    <div class="note" style="margin-top:24px;background:#fff;border:1.5px solid var(--line);
+         border-left:4px solid var(--teal);border-radius:11px;padding:15px 16px;font-size:14px;color:#3d6169">
+      <b style="color:var(--ink)">Next you will be asked for location.</b><br>
+      Choose <b>While using the app</b>. This proves you were at the plant.
+      The app only reads your location while it is open — it never tracks you in the background.
+    </div>
+    <div style="margin-top:20px"><button class="btn" id="suGo">Save and continue</button></div>
     <p class="sub" style="margin-top:18px;font-size:13.5px">Stored on this phone only. Change it any time from Settings.</p>
   </div>
 </div>
@@ -185,6 +191,11 @@ textarea{min-height:76px;resize:vertical}
   <div class="stats">
     <div class="stat"><div class="n" id="hToday">0</div><div class="l">Logged today</div></div>
     <div class="stat" id="hPendBox"><div class="n" id="hPendN">0</div><div class="l">Waiting to send</div></div>
+  </div>
+
+  <div class="pend hide" id="hGeo" style="background:#fdecea;border-color:#e5a29b">
+    <div class="tx" id="hGeoT" style="color:#8c2f22"></div>
+    <button id="hGeoFix" style="background:#C0392B;color:#fff">Fix</button>
   </div>
 
   <div class="pend hide" id="hPend">
@@ -263,6 +274,10 @@ textarea{min-height:76px;resize:vertical}
     <input id="stPhone" type="tel" inputmode="tel">
     <div class="lab">Device ID</div>
     <input id="stDev" readonly style="font-family:var(--mono);background:#f2f8f8">
+    <div class="lab">Location permission</div>
+    <p class="sub" id="stGeo" style="margin:0 0 10px">Checking…</p>
+    <button class="btn ghost sm" id="stGeoAsk">Request location access</button>
+
     <div class="lab">Plant register</div>
     <p class="sub" id="stPlants" style="margin:0 0 10px"></p>
     <button class="btn ghost sm" id="stRefresh">Refresh plant list</button>
@@ -278,9 +293,9 @@ textarea{min-height:76px;resize:vertical}
    CONFIG — set these two lines, nothing else
    ============================================================ */
 var CFG = {
-  API : 'https://script.google.com/macros/s/AKfycbx7Xsam2HwV0kvewSibZwvDFNymK-OyMMFd7JOva2-PU6ttkoRnvOOnkJmhBenYK4mM/exec',
-KEY : 'puttalam-ro-2026',
-  VER : 'v1.0'
+  API : 'PASTE_YOUR_APPS_SCRIPT_EXEC_URL_HERE',
+  KEY : 'change-this-shared-key',
+  VER : 'v1.1'
 };
 
 var WORK = ['Routine service','Filter change','Membrane clean','Breakdown repair','Installation','Inspection only'];
@@ -302,6 +317,38 @@ if (!devId){ devId = 'DEV-' + Math.random().toString(36).slice(2,8).toUpperCase(
 
 var cur = null, work = WORK[0], pos = null, stream = null, scanning = false, torchOn = false;
 var $ = function(id){ return document.getElementById(id); };
+
+/* ---------- location permission ---------- */
+async function geoPermState(){
+  try{
+    if (navigator.permissions && navigator.permissions.query)
+      return (await navigator.permissions.query({ name: 'geolocation' })).state;  // granted|denied|prompt
+  }catch(e){}
+  return 'unknown';
+}
+function askLocationOnce(done){
+  if (!navigator.geolocation) return done();
+  var fired = false, fin = function(){ if (!fired){ fired = true; done(); } };
+  navigator.geolocation.getCurrentPosition(fin, fin,
+    { enableHighAccuracy:true, timeout:15000, maximumAge:0 });
+  setTimeout(fin, 16000);
+}
+async function geoBanner(){
+  var st = await geoPermState();
+  var bad = (st === 'denied');
+  $('hGeo').classList.toggle('hide', !bad);
+  if (bad) $('hGeoT').textContent =
+    'Location is blocked on this phone. Every visit you log will be flagged as unverified.';
+}
+$('hGeoFix').onclick = function(){
+  alert('To turn location back on:\n\n' +
+        '1. Android Settings\n' +
+        '2. Apps  ->  RO Scanner\n' +
+        '3. Permissions  ->  Location\n' +
+        '4. Choose "Allow only while using the app"\n\n' +
+        'Also check Location is switched on in your quick settings, ' +
+        'and set to High accuracy.');
+};
 
 /* ---------- view router ---------- */
 var VIEWS = ['vSetup','vHome','vScan','vConf','vDone','vSet'];
@@ -327,6 +374,7 @@ function renderHome(){
   if (pend.length) $('hPendT').textContent = pend.length + (pend.length === 1 ? ' visit is' : ' visits are')
       + ' saved on this phone and will send as soon as there is signal.';
 
+  geoBanner();
   var list = $('hList'), recent = queue.slice(-25).reverse();
   $('hCount').textContent = queue.length ? queue.length + ' total' : '';
   if (!recent.length){ list.innerHTML = '<div class="empty">No visits logged yet.</div>'; return; }
@@ -448,12 +496,30 @@ function openConfirm(id){
   $('cGo').disabled = false; $('cGo').textContent = 'Log this visit';
   go('vConf');
 
-  if (navigator.geolocation) navigator.geolocation.getCurrentPosition(
-    function(g){ pos = g.coords; $('cGd').classList.add('on');
-      $('cGt').textContent = 'Location captured (±' + Math.round(g.coords.accuracy) + ' m)'; },
-    function(){ $('cGt').textContent = 'Location unavailable — visit will be flagged'; },
-    { enableHighAccuracy:true, timeout:12000, maximumAge:0 });
-  else $('cGt').textContent = 'Location not supported on this phone';
+  geoStart();
+}
+
+/* Location. A phone's first fix is often a cell-tower guess good to a
+   kilometre; keep watching and keep the most accurate one. */
+var geoWatch = null;
+function geoUI(){
+  if (!pos){ $('cGt').textContent = 'Location unavailable — visit will be flagged'; return; }
+  var a = Math.round(pos.accuracy);
+  $('cGd').classList.toggle('on', a <= 60);
+  $('cGt').textContent = a <=  60 ? 'Location confirmed (±' + a + ' m)'
+                       : a <= 500 ? 'Improving accuracy… (±' + a + ' m)'
+                       :            'Weak signal (±' + a + ' m) — step outside';
+}
+function geoStop(){ if (geoWatch !== null){ navigator.geolocation.clearWatch(geoWatch); geoWatch = null; } }
+function geoStart(){
+  geoStop();
+  if (!navigator.geolocation){ $('cGt').textContent = 'Location not supported on this phone'; return; }
+  geoWatch = navigator.geolocation.watchPosition(function(g){
+    if (!pos || g.coords.accuracy < pos.accuracy) pos = g.coords;
+    geoUI();
+    if (pos.accuracy <= 30) geoStop();
+  }, function(){ geoUI(); }, { enableHighAccuracy:true, maximumAge:0, timeout:20000 });
+  setTimeout(geoStop, 30000);
 }
 
 WORK.forEach(function(w, i){
@@ -468,6 +534,7 @@ WORK.forEach(function(w, i){
 });
 
 $('cGo').onclick = async function(){
+  geoStop();
   this.disabled = true; this.textContent = 'Saving…';
   var item = {
     uid      : 'S' + Date.now() + Math.random().toString(36).slice(2,6),
@@ -480,6 +547,7 @@ $('cGo').onclick = async function(){
     deviceId : devId,
     lat      : pos ? +pos.latitude.toFixed(6)  : null,
     lng      : pos ? +pos.longitude.toFixed(6) : null,
+    acc      : pos ? Math.round(pos.accuracy)  : null,
     ts       : new Date().toISOString(),
     status   : 'queued'
   };
@@ -498,7 +566,7 @@ async function send(item){
     key: CFG.KEY, action: 'scan', source: 'App', uid: item.uid,
     plantId: item.plantId, tech: item.tech, techPhone: item.techPhone,
     workType: item.workType, note: item.note, device: item.device, deviceId: item.deviceId,
-    lat: item.lat, lng: item.lng, scannedAt: item.ts,
+    lat: item.lat, lng: item.lng, acc: item.acc, scannedAt: item.ts,
     offline: (new Date() - new Date(item.ts)) > 90000
   });
   try{
@@ -619,7 +687,10 @@ $('suGo').onclick = function(){
   if (!n){ $('suName').focus(); return; }
   tech = { name: n, phone: $('suPhone').value.trim() };
   S.set('tech', tech);
-  go('vHome'); renderHome(); loadPlants().then(renderHome);
+  this.disabled = true; this.textContent = 'Tap Allow when asked…';
+  askLocationOnce(function(){
+    go('vHome'); renderHome(); loadPlants().then(renderHome);
+  });
 };
 $('hScan').onclick   = openCamera;
 $('hManual').onclick = askManual;
@@ -630,12 +701,30 @@ $('hSet').onclick    = function(){
   var n = Object.keys(plants).length;
   $('stPlants').textContent = n ? n + ' plants saved for offline use.' : 'No plant list saved yet.';
   $('stVer').textContent = 'RO Service Scanner ' + CFG.VER;
+  geoPermState().then(function(st){
+    $('stGeo').textContent =
+      st === 'granted' ? 'Granted — visits will carry proof of location.'
+    : st === 'denied'  ? 'BLOCKED. Fix it in Android Settings > Apps > RO Scanner > Permissions.'
+    : st === 'prompt'  ? 'Not asked yet. Tap the button below.'
+    :                    'Cannot be checked on this phone.';
+  });
   go('vSet');
 };
 $('stSave').onclick = function(){
   var n = $('stName').value.trim(); if (!n) return;
   tech = { name: n, phone: $('stPhone').value.trim() };
   S.set('tech', tech); go('vHome'); renderHome();
+};
+$('stGeoAsk').onclick = function(){
+  var b = this; b.textContent = 'Tap Allow when asked…';
+  askLocationOnce(function(){
+    b.textContent = 'Request location access';
+    geoPermState().then(function(st){
+      $('stGeo').textContent = st === 'granted'
+        ? 'Granted — visits will carry proof of location.'
+        : 'Still blocked. Turn it on in Android Settings > Apps > RO Scanner > Permissions.';
+    });
+  });
 };
 $('stBack').onclick    = function(){ go('vHome'); renderHome(); };
 $('stRefresh').onclick = async function(){
