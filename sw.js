@@ -1,5 +1,5 @@
 /* RO Service Scanner — offline shell */
-var CACHE = 'ro-scanner-v4';
+var CACHE = 'ro-scanner-v6';
 var SHELL = ['./', 'index.html', 'jsQR.min.js', 'manifest.webmanifest',
              'icon-192.png', 'icon-512.png', 'icon-maskable.png', 'apple-touch-icon.png'];
 
